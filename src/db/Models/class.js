@@ -34,15 +34,41 @@ const classSchema = mongoose.Schema({
         }
     }],
     assignments : [{
-        title : {
-            type : String,
-            required : true,
-            trim : true,
+        title:{
+            type: String,
+            trim: true,
+            required: true
         },
-        link : {
-            type : String,
-            required : true,
+        link:{
+            type: String,
+            trim: true,
+            required: true
         },
+        deadline:{
+            type: Date,
+            required: true
+
+        },
+        created_at: {
+            type: Date,
+            required: true,
+        },
+        submissions:[{
+            user: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User',
+                required: true
+            },
+            doclink: {
+                type: String,
+                trim: true,
+                required: true
+            },
+            submitted_at: {
+                type: Date,
+                default: new Date()
+            },
+        }]
     }],
     comments : [{
         body : {

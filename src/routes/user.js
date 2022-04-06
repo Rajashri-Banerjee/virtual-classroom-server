@@ -3,7 +3,7 @@ const Room = require('../db/Models/class')
 const router = express.Router()
 const User = require('./../db/Models/user')
 const userAuth = require('./../middlewares/userAuth')
-
+const Chat = require('./../db/Models/chat')
 
 const aws = require( 'aws-sdk' );
 const multerS3 = require( 'multer-s3' );
@@ -11,6 +11,11 @@ const multer = require('multer');
 const path = require( 'path' );
 const url = require('url')
 // S3 object 
+// const s3 = new aws.S3({
+//     accessKeyId: process.env.AWS_BUCKET_KEY,
+//     secretAccessKey: process.env.AWS_BUCKET_SECRET,
+//     Bucket: 'rootrskbucket1'
+// })
 const s3 = new aws.S3({
     accessKeyId: 'AKIA3OYGIS7MBPLU7EO2',
     secretAccessKey: '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',
@@ -118,8 +123,12 @@ router.get('/users',async(req,res)=>{
 // For getting user details
 router.get('/user/me',userAuth,async(req,res)=>{
     try {
-        const users= req.user
-        res.json(users)
+        const user= req.user
+        const token = await user.getAuthToken()
+        res.json({
+            user,
+            token
+        })
     } catch (error) {
         res.json({
             status : 'failed',
@@ -191,7 +200,7 @@ router.post( '/user/profile-img',userAuth,async(req,res)=>{
                 })
             }
             const imageName = req.file.key;
-            const imageLocation = req.file.location;// Save the file name into database into profile model
+            const imageLocation = req.file.location; // Save the file name into database into profile model
             console.log(req.user)
             if(req.user.profile && req.user.profile.key){
                 // deleting 
@@ -313,6 +322,21 @@ router.get('/user/class',async(req,res) => {
         const room = await Room.findById(req.query.id).populate('owner')
         const users = await User.find({'classes.class':room._id}).select('username fullname')
         const teacher = room.owner
+        let chatRoom = await Chat.findOne({room:room._id})
+        .populate('room messages.user messages.admin','title fullname')
+        if(!chatRoom){
+            const newChatRoom = new Chat({
+                room:room._id,
+            })
+            await newChatRoom.save()
+            chatRoom = await Chat.findOne({room:room._id})
+            if(!chatRoom) {
+                return res.json({
+                    error : "Something went wrong",
+                    status : 'failed'
+                })
+            }
+        }
 
         if(!room){
             return res.json({
@@ -324,13 +348,188 @@ router.get('/user/class',async(req,res) => {
             status:'success',
             room,
             users,
-            teacher
+            teacher,
+            chat:chatRoom
         })
     }   catch (error) {
             return res.json({
                 status:'failed',
                 error:error.message
             })
+    }
+})
+
+/**
+ * ChatBox Routers
+ */
+// send message
+router.post('/user/message',userAuth,async(req,res)=>{
+    try {
+        console.log(req.body)
+        const {room_id,body } = req.body
+        console.log(room_id,body)
+        if(!room_id){
+            return res.json({
+                error:"Room is required.",
+                status:'falied'
+            })
+        }
+        const room = await Room.findById(room_id.toString())
+        if(!room){
+            return res.json({
+                error:"No Such Room Exist.",
+                status:'falied'
+            })
+        }
+        let chatRoom = await Chat.findOne({room:room._id})
+        if(!chatRoom){
+            const newChatRoom = new Chat({
+                room:room._id,
+            })
+            await newChatRoom.save()
+            chatRoom = await Chat.findOne({room:room._id})
+            if(!chatRoom) {
+                return res.json({
+                    error : "Something went wrong",
+                    status : 'failed'
+                })
+            }
+        }
+        const message ={
+            body,
+            user:req.user._id
+        }
+        chatRoom.messages = chatRoom.messages.concat(message)
+        await chatRoom.save()
+        chatRoom = await Chat.findOne({room:room._id})
+        .populate('room messages.user messages.admin','title fullname')
+        
+        res.json({
+            status:'Success',
+            chatRoom
+        })
+    } catch (error) {
+        res.json({
+            error: error.message
+        })
+    }
+})
+
+router.get('/user/message',async(req,res)=>{
+    try {
+        const { room_id } = req.query
+        if(!room_id){
+            return res.json({
+                error:"No Such Room Exist.",
+                status:'falied'
+            })
+        }
+        const chatRoom = await Chat.findOne({room:room_id})
+        .populate('room messages.user messages.admin','title fullname')
+        res.json({
+            chatRoom
+        })
+
+    } catch (error) {
+        res.json({
+            error:error.message
+        })
+    }
+})
+
+router.delete('/user/message',userAuth,async(req,res)=>{
+    try {
+        console.log(req.body)
+        const {_id,body } = req.body
+        console.log(_id,body)
+        if(!_id){
+            return res.json({
+                error:"Room is required.",
+                status:'falied'
+            })
+        }
+        // const room = await Room.findById(room_id.toString())
+        let chatRoom = await Chat.findOne({'messages._id':_id})
+        if(!chatRoom){
+            return res.json({
+                error : "Message already deleted",
+                status : 'failed'
+            })
+        }
+        chatRoom.messages = chatRoom.messages.filter((message)=> {
+            return message._id.toString()!==_id.toString()
+        })
+        await chatRoom.save()
+        chatRoom = await Chat.findOne({_id:chatRoom._id})
+        .populate('room messages.user messages.admin','title fullname')
+        
+        res.json({
+            status:'Success',
+            chatRoom
+        })
+    } catch (error) {
+        res.json({
+            error: error.message
+        })
+    }
+})
+
+router.post('/user/document-upload',userAuth,async(req,res) => {
+    try {
+        profileImgUpload( req, res, ( error ) => {
+            if(error){
+                return res.json({
+                    error: error
+                })
+            }
+            if(req.file === undefined){
+                return res.json({
+                    error:'No File Selected.',
+                    status:'failed'
+                })
+            }
+            const imageName = req.file.key;
+            const imageLocation = req.file.location;// Save the file name into database into profile model
+
+            res.json({
+                id: imageName,
+                uri: imageLocation,
+            })
+        });
+    } catch (error) {
+        res.json({
+            status : 'failed',
+            error : error.message
+        })
+    }
+})
+
+router.post('/user/assignment-submission', userAuth, async(req,res) => {
+    console.log(req.body)
+    try {
+        const room = await Room.findOne({'assignments._id':req.body._id})
+        room.assignments = room.assignments.map((assignment)=>{
+            if(assignment._id.toString()===req.body._id.toString()){
+                assignment.submissions = assignment.submissions.concat({
+                    submitted_at: req.body.submitted_at,
+                    doclink: req.body.doclink,
+                    user: req.user._id
+                })
+                return assignment
+            }
+            return assignment
+        })
+        await room.save()
+        res.json({
+            status: 'success',
+            room
+        })
+    }
+    catch(error) {
+        res.json({
+            status : 'failed',
+            error : error.message
+        })
     }
 })
 

@@ -15,7 +15,6 @@ const teacherSchema = mongoose.Schema({
         type : String,
         required : true,
         trim : true,
-        // ab ye kya khol diye ho kuch nahi tum join kro client  okhokl na hathadaskjhfsalkhfsakjhfok
     },
     email : {
         type : String,

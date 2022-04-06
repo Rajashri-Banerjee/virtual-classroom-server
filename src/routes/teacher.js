@@ -4,6 +4,7 @@ const Teacher = require('./../db/Models/teacher')
 const Room = require('./../db/Models/class')
 const teacherAuth = require('./../middlewares/teacherAuth')
 const User = require('../db/Models/user')
+const Chat = require('./../db/Models/chat')
 
 
 const aws = require( 'aws-sdk' );
@@ -198,6 +199,7 @@ router.post('/teacher/class',teacherAuth,async(req,res) =>{
 
 //Route for updating class
 router.patch('/teacher/class',teacherAuth,async(req,res) => {
+    console.log(req.body)
     try {
         const _id = req.body._id
         if(!_id){
@@ -252,7 +254,7 @@ router.get('/teacher/class',async(req,res) => {
                 error:'Class ID is required'
             })
         }
-        const room = await Room.findById(req.query.id)
+        const room = await Room.findById(req.query.id).populate('assignments.submissions.user','fullname')
         const users = await User.find({'classes.class':room._id}).select('username fullname')
 
         if(!room){
@@ -421,4 +423,142 @@ router.post('/teacher/document-upload',teacherAuth,async(req,res) => {
         })
     }
 })
+
+/** For testing */
+router.get('/classes',async(req,res)=>{
+    const classes = await Room.find({})
+    res.json({
+        classes
+    })
+})
+router.get('/chats',async(req,res)=>{
+    const chat = await Chat.find({})
+    res.json({
+        chat
+    })
+})
+
+router.post('/teacher/message',teacherAuth,async(req,res)=>{
+    try {
+        console.log(req.body)
+        const {room_id,body } = req.body
+        console.log(room_id,body)
+        if(!room_id){
+            return res.json({
+                error:"Room is required.",
+                status:'falied'
+            })
+        }
+        const room = await Room.findById(room_id.toString())
+        if(!room){
+            return res.json({
+                error:"No Such Room Exist.",
+                status:'falied'
+            })
+        }
+        let chatRoom = await Chat.findOne({room:room._id})
+        if(!chatRoom){
+            const newChatRoom = new Chat({
+                room:room._id,
+            })
+            await newChatRoom.save()
+            chatRoom = await Chat.findOne({room:room._id})
+            if(!chatRoom) {
+                return res.json({
+                    error : "Something went wrong",
+                    status : 'failed'
+                })
+            }
+        }
+        const message ={
+            body,
+            admin:req.user._id
+        }
+        chatRoom.messages = chatRoom.messages.concat(message)
+        await chatRoom.save()
+        chatRoom = await Chat.findOne({room:room._id})
+        .populate('room messages.user messages.admin','title fullname')
+        
+        res.json({
+            status:'Success',
+            chatRoom
+        })
+    } catch (error) {
+        res.json({
+            error: error.message
+        })
+    }
+})
+
+router.get('/teacher/message',async(req,res)=>{
+    try {
+        const { room_id } = req.query
+        console.log(room_id)
+        if(!room_id){
+            return res.json({
+                error:"No Such Room Exist.",
+                status:'falied'
+            })
+        }
+        const chatRoom = await Chat.findOne({room:room_id})
+        .populate('room messages.user messages.admin','title fullname')
+        res.json({
+            chatRoom
+        })
+
+    } catch (error) {
+        res.json({
+            error:error.message
+        })
+    }
+})
+
+router.delete('/teacher/message',teacherAuth,async(req,res)=>{
+    try {
+        console.log(req.body)
+        const {_id,body } = req.body
+        console.log(_id,body)
+        if(!_id){
+            return res.json({
+                error:"Room is required.",
+                status:'falied'
+            })
+        }
+        // const room = await Room.findById(room_id.toString())
+        let chatRoom = await Chat.findOne({'messages._id':_id})
+        if(!chatRoom){
+            return res.json({
+                error : "Message already deleted",
+                status : 'failed'
+            })
+        }
+        chatRoom.messages = chatRoom.messages.filter((message)=> {
+            return message._id.toString()!==_id.toString()
+        })
+        await chatRoom.save()
+        chatRoom = await Chat.findOne({_id:chatRoom._id})
+        .populate('room messages.user messages.admin','title fullname')
+        
+        res.json({
+            status:'Success',
+            chatRoom
+        })
+    } catch (error) {
+        res.json({
+            error: error.message
+        })
+    }
+})
+
+//Assignment Routes
+
+router.post('/teacher/assignment',teacherAuth,async(req,res)=> {
+    try{
+
+    }
+    catch(error){
+
+    }
+})
+
 module.exports = router
