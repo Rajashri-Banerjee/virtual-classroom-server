@@ -16,8 +16,8 @@ app.use(function (req, res, next) {
       "http://localhost:3000",
   ];
   const origin = req.headers.origin;
-    if (allowedOrigins.indexOf(origin) > -1) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
+    if (true) {
+        res.setHeader('Access-Control-Allow-Origin', "*");
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
 

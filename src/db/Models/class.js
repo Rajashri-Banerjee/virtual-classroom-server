@@ -97,6 +97,9 @@ const classSchema = mongoose.Schema({
         ref : 'Teacher',
         required : true,
     },
+    meeting_id:{
+        type:String,
+    }
 })
 
 const Room = mongoose.model('Class',classSchema)

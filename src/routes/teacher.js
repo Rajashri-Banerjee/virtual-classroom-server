@@ -6,7 +6,6 @@ const teacherAuth = require('./../middlewares/teacherAuth')
 const User = require('../db/Models/user')
 const Chat = require('./../db/Models/chat')
 
-
 const aws = require( 'aws-sdk' );
 const multerS3 = require( 'multer-s3' );
 const multer = require('multer');
@@ -232,7 +231,7 @@ router.delete('/teacher/class',teacherAuth,async(req,res) => {
         console.log(req.user)
         if(req.user._id.toString() !== r.owner.toString()){
             return res.json({
-                error:'Your are not the owner of this class.'
+                error:'You are not the owner of this class.'
             })
         }
         const room = await Room.findByIdAndDelete(_id,req.body)
@@ -255,8 +254,9 @@ router.get('/teacher/class',async(req,res) => {
             })
         }
         const room = await Room.findById(req.query.id).populate('assignments.submissions.user','fullname')
-        const users = await User.find({'classes.class':room._id}).select('username fullname')
 
+        const users = await User.find({'classes.class':room._id}).select('username fullname profile')
+        console.log(users)
         if(!room){
             return res.json({
                 status:'failed',
@@ -279,8 +279,12 @@ router.get('/teacher/class',async(req,res) => {
 //Route for teacher's details
 router.get('/teacher/me',teacherAuth,async(req,res)=>{
     try {
-        const users= req.user
-        res.json(users)
+        const teacher= req.user
+        const token = await teacher.getAuthToken()
+        res.json({
+            teacher,
+            token
+        })
     } catch (error) {
         res.json({
             status : 'failed',
@@ -441,7 +445,7 @@ router.get('/chats',async(req,res)=>{
 router.post('/teacher/message',teacherAuth,async(req,res)=>{
     try {
         console.log(req.body)
-        const {room_id,body } = req.body
+        const {room_id,body,created_at } = req.body
         console.log(room_id,body)
         if(!room_id){
             return res.json({
@@ -472,7 +476,8 @@ router.post('/teacher/message',teacherAuth,async(req,res)=>{
         }
         const message ={
             body,
-            admin:req.user._id
+            admin:req.user._id,
+            created_at
         }
         chatRoom.messages = chatRoom.messages.concat(message)
         await chatRoom.save()
@@ -521,7 +526,7 @@ router.delete('/teacher/message',teacherAuth,async(req,res)=>{
         if(!_id){
             return res.json({
                 error:"Room is required.",
-                status:'falied'
+                status:'failed'
             })
         }
         // const room = await Room.findById(room_id.toString())
@@ -552,13 +557,35 @@ router.delete('/teacher/message',teacherAuth,async(req,res)=>{
 
 //Assignment Routes
 
-router.post('/teacher/assignment',teacherAuth,async(req,res)=> {
+router.delete('/teacher/remove-participant', teacherAuth, async(req,res)=>{
+    const user = await User.findById(req.body.user_id)
+    console.log('aa to raha hai')
+    
+    const filteredClasses = user.classes.filter((cl) =>{
+        return cl.class.toString()!==req.body.room_id.toString()
+    })
+    user.classes = filteredClasses
+    await user.save()
+    const users = await User.find({'classes.class':req.body.room_id}).select('username fullname')
+    res.json({
+        user,
+        users
+    })
+})
+router.post('/teacher/update-meeting',teacherAuth,async(req,res)=>{
     try{
-
-    }
-    catch(error){
-
+        const room = await Room.findById(req.body.room_id)
+        room.meeting_id = req.body.meeting_id
+        await room.save()
+        res.json({
+            room,
+            status:'success'
+        })
+    }catch(e){
+        res.json({
+            error:e.message,
+            status:'failed'
+        })
     }
 })
-
 module.exports = router

@@ -4,7 +4,7 @@ const router = express.Router()
 const User = require('./../db/Models/user')
 const userAuth = require('./../middlewares/userAuth')
 const Chat = require('./../db/Models/chat')
-
+const Teacher = require('./../db/Models/teacher')
 const aws = require( 'aws-sdk' );
 const multerS3 = require( 'multer-s3' );
 const multer = require('multer');
@@ -68,9 +68,18 @@ router.post('/signup',async(req,res) =>{
             token,
         })
     }catch(e){
+        console.log(e.message)
+        var  error
+        if (e.message.includes('index: email_1 dup key:')){
+            error='Email ID already taken.'
+        }else if(e.message.includes('index: username_1 dup key:')){
+            error='Username already taken.'
+        }else{
+            error: e.message
+        }
         res.json({
             status : 'failed',
-            error  : e.message
+            error  : error
         })
     }
 })
@@ -81,7 +90,7 @@ router.post('/login',async(req,res) =>{
         if (!req.body.id || !req.body.password){
             return res.json({
                 status : 'failed',
-                error : 'User email / username & password is required',
+                error : 'User email id / username & password is required',
             })
         }
         const {user,error} = await User.findByCredentials({
@@ -273,7 +282,7 @@ router.get('/student/class',async(req,res) => {
             })
         }
         const room = await Room.findById(req.query.id).populate('owner')
-        const users = await User.find({'classes.class':room._id}).select('username fullname')
+        const users = await User.find({'classes.class':room._id}).select('username fullname profile')
 
         if(!room){
             return res.json({
@@ -320,7 +329,7 @@ router.get('/user/class',async(req,res) => {
             })
         }
         const room = await Room.findById(req.query.id).populate('owner')
-        const users = await User.find({'classes.class':room._id}).select('username fullname')
+        const users = await User.find({'classes.class':room._id}).select('username fullname profile')
         const teacher = room.owner
         let chatRoom = await Chat.findOne({room:room._id})
         .populate('room messages.user messages.admin','title fullname')
@@ -366,7 +375,7 @@ router.get('/user/class',async(req,res) => {
 router.post('/user/message',userAuth,async(req,res)=>{
     try {
         console.log(req.body)
-        const {room_id,body } = req.body
+        const {room_id,body,created_at } = req.body
         console.log(room_id,body)
         if(!room_id){
             return res.json({
@@ -397,7 +406,8 @@ router.post('/user/message',userAuth,async(req,res)=>{
         }
         const message ={
             body,
-            user:req.user._id
+            user:req.user._id,
+            created_at
         }
         chatRoom.messages = chatRoom.messages.concat(message)
         await chatRoom.save()
@@ -476,6 +486,26 @@ router.delete('/user/message',userAuth,async(req,res)=>{
 
 router.post('/user/document-upload',userAuth,async(req,res) => {
     try {
+        const room = await Room.findOne({'assignments._id':req.query._id})
+        const index = room.assignments.findIndex(i=>i._id.toString() === req.query._id.toString())
+        var assignment 
+        if (index > -1){
+            assignment = room.assignments[index]
+        }
+        if (assignment){
+            const deadline = Date.parse(assignment.deadline)
+            const currline = Date.now()
+            console.log(deadline,currline)
+            if (currline > deadline){
+                return res.json({
+                    index,
+                    assignment,
+                    deadline: Date.parse(assignment.deadline),
+                    error:`You can't submit this assignment since the deadline was at `+ 
+                    new Date(assignment.deadline).toLocaleString()
+                })
+            }
+        }
         profileImgUpload( req, res, ( error ) => {
             if(error){
                 return res.json({
@@ -511,7 +541,7 @@ router.post('/user/assignment-submission', userAuth, async(req,res) => {
         room.assignments = room.assignments.map((assignment)=>{
             if(assignment._id.toString()===req.body._id.toString()){
                 assignment.submissions = assignment.submissions.concat({
-                    submitted_at: req.body.submitted_at,
+                    submitted_at: Date.now(),
                     doclink: req.body.doclink,
                     user: req.user._id
                 })
@@ -533,4 +563,24 @@ router.post('/user/assignment-submission', userAuth, async(req,res) => {
     }
 })
 
+router.get('/profile/:id',async(req,res)=>{
+    try {
+        var user =  await User.findById(req.params.id)
+        .select('username email fullname profile contact')
+        if (!user) {
+            user = await Teacher.findById(req.params.id)
+            .select('username email fullname profile contact')
+        }
+        
+        res.json({
+            status:'success',
+            user
+        })
+    } catch (error) {
+        res.json({
+            status : 'failed',
+            error : error.message
+        })
+    }
+})
 module.exports = router
