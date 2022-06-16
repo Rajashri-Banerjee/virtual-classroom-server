@@ -4,7 +4,7 @@ const userRouter = require ('./src/routes/user')
 const teacherRouter = require ('./src/routes/teacher')
 const dotenv = require ('dotenv');
 const morgan = require('morgan');
-const require = require('cors');
+const cors = require('cors');
 
 const app = express()
 app.use(express.json())
