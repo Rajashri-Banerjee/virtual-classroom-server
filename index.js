@@ -9,7 +9,7 @@ const require = require('cors');
 const app = express()
 app.use(express.json())
 app.use(morgan('common'))
-app.use(cors)
+app.use(cors())
 dotenv.config();
 // app.use(function (req, res, next) {
 
